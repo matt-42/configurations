@@ -36,7 +36,7 @@
 
 
 (setq inhibit-startup-message t)      ; don't show the GNU splash screen
-(scroll-bar-mode nil)                 ; no scroll bar
+(scroll-bar-mode -1)                 ; no scroll bar
 (menu-bar-mode -1)                    ; no menu bar
 (tool-bar-mode -1)                    ; no tool bar
 (setq frame-title-format "%b")        ; titlebar shows buffer's name
@@ -52,6 +52,11 @@
 (setq-default indent-tabs-mode nil)   ; spaces instead of tabs
 (setq js-indent-level 2) ; javascript indentation
 (setq c-basic-offset 2)
+(c-set-offset 'substatement-open 0)
+
+(add-hook 'c-mode-common-hook 
+  (lambda()
+    (dtrt-indent-mode t)))
 
 ;(load-file "~/.emacs.d/lisp/epita-style.el")
 ;(setq c-default-style "epita")
@@ -78,6 +83,11 @@
 (global-set-key [f8] 'recompile)
 
 (global-set-key (kbd "C-c C-c") 'comment-region)
+
+;; In search, match spaces with any whitespace char.
+(setq isearch-lax-whitespace t)
+(setq isearch-regexp-lax-whitespace t)
+(setq search-whitespace-regexp "[ \t\r\n]+")
 
 ;; Backups
 (setq
@@ -117,6 +127,25 @@
 ; Go
 (autoload 'go-mode "go-mode" "Go editing mode." t)
 (add-to-list 'auto-mode-alist '("\\.go$" . go-mode))
+(defun auto-complete-for-go ()
+(auto-complete-mode 1))
+(add-hook 'go-mode-hook 'auto-complete-for-go)
+(with-eval-after-load 'go-mode
+   (require 'go-autocomplete))
+
+(defun my-go-mode-hook ()
+  ; Call Gofmt before saving
+  (add-hook 'before-save-hook 'gofmt-before-save)
+  ; Customize compile command to run go build
+  (if (not (string-match "go" compile-command))
+      (set (make-local-variable 'compile-command)
+           "go build -v && go test -v && go vet"))
+  ; Godef jump key binding
+  (local-set-key (kbd "M-.") 'godef-jump)
+  (local-set-key (kbd "M-*") 'pop-tag-mark)
+)
+(add-hook 'go-mode-hook 'my-go-mode-hook)
+
 
 ; C#
 (autoload 'csharp-mode "csharp-mode" "Major mode for editing C# code." t)
@@ -151,6 +180,9 @@
 ;; emacsclient -a emacs --no-wait +%l %f
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;(require 'tex-site)
+(require 'cl)
+
 ;; only start server for okular comms when in latex mode
 (add-hook 'LaTeX-mode-hook 'server-start)
 (setq TeX-PDF-mode t) ;; use pdflatex instead of latex
@@ -182,7 +214,14 @@
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
- '(LaTeX-command "latex -synctex=1")
+ '(LaTeX-command "latex -synctex=1 -shell-escape")
+ '(flycheck-googlelint-filter
+   "-,+whitespace,-whitespace/braces,-whitespace/newline,-whitespace/comments,+build/include_what_you_use,+build/include_order,+readability/todo")
+ '(flycheck-googlelint-linelength "120")
+ '(flycheck-googlelint-verbose "0")
+ '(package-selected-packages
+   (quote
+    (go-autocomplete go-mode vlf undo-tree smex smart-tabs-mode rtags langtool irony-eldoc idle-highlight-mode highlight-indentation helm-commandlinefu helm-bibtex flycheck-irony flycheck-google-cpplint company-statistics company-jedi company-irony-c-headers company-irony company-auctex company-anaconda color-theme cmake-mode cmake-ide clang-format autopair auto-dictionary auto-complete)))
  '(safe-local-variable-values (quote ((TeX-master . "../main") (TeX-master . t)))))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -195,11 +234,10 @@
 (setq TeX-view-program-list
  '(("PDF Viewer" "okular --unique %o#src:%n%b")))
 
-(require 'company-auctex)
-(company-auctex-init)
+;(require 'company-auctex)
+;(company-auctex-init)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 
 
 (require 'package) ;; You might already have this line
@@ -211,71 +249,6 @@
 (package-initialize) ;; You might already have this line
 
 
-;;;;;;;;;; CMAKE-IDE ;;;;;;;;;;;;;;;;;;;;;;
-
-
-
-(defsubst string-empty-p (string)
-  "Check whether STRING is empty."
-  (string= string ""))
-
-(require 'rtags)
-(require 'company)
-
-(setq rtags-autostart-diagnostics t)
-(rtags-diagnostics)
-(setq rtags-completions-enabled t)
-(push 'company-rtags company-backends)
-(global-company-mode)
-(define-key c-mode-base-map (kbd "<C-tab>") (function company-complete))
-
-(cmake-ide-setup)
-
-(require 'company-rtags)
-
-(setq rtags-completions-enabled t)
-(eval-after-load 'company
-  '(add-to-list
-    'company-backends 'company-rtags))
-(setq rtags-autostart-diagnostics t)
-(rtags-enable-standard-keybindings)
-
-(setq company-idle-delay 0)
-
-;;;;;;;;;;; SMEX
-(require 'smex)
-(global-set-key (kbd "M-x") 'smex)
-(global-set-key (kbd "M-X") 'smex-major-mode-commands)
-;; This is your old M-x.
-(global-set-key (kbd "C-c c M-x") 'execute-extended-command)
-
-(custom-set-faces
- ;; custom-set-faces was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- )
-
-;;;; Language tool grammar checker.
-
-(require 'langtool)
-(setq langtool-java-classpath
-      "/usr/share/languagetool:/usr/share/java/languagetool/*")
-(setq langtool-java-bin "/usr/lib/jvm/java-8-openjdk/jre/bin/java")
-(setq langtool-default-language "fr")
-(setq langtool-mother-tongue "fr")
-
-(defun langtool-autoshow-detail-popup (overlays)
-  (when (require 'popup nil t)
-    ;; Do not interrupt current popup
-    (unless (or popup-instances
-                ;; suppress popup after type `C-g` .
-                (memq last-command '(keyboard-quit)))
-      (let ((msg (langtool-details-error-message overlays)))
-        (popup-tip msg)))))
-(setq langtool-autoshow-message-function
-      'langtool-autoshow-detail-popup)
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (add-hook 'python-mode-hook 'flycheck-mode)
@@ -285,3 +258,92 @@
  '(add-to-list 'company-backends 'company-anaconda))
 (add-hook 'python-mode-hook 'anaconda-mode)
 (add-hook 'python-mode-hook 'anaconda-eldoc-mode)
+
+
+(require 'mbda-mode)
+
+
+;; (require 'company-irony)
+;; (require 'company-irony-c-headers)
+;; (defun my/company-irony-mode-hook ()
+;;   (add-to-list 'company-backends '(company-irony-c-headers company-irony)))
+;; (add-hook 'c-mode-common-hook 'my/company-irony-mode-hook)
+;; (add-hook 'c-mode-common-hook 'irony-mode)
+
+;; ;; find compilation database generated with 'cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON .'
+;; (add-hook 'irony-mode-hook 'irony-cdb-autosetup-compile-options)
+
+;; ;; add contextual information in echo buffer
+;; (add-hook 'irony-mode-hook 'irony-eldoc)
+
+;; ;; delete trailing whitespaces on save
+;; (add-hook 'c-mode-common-hook
+;;           (lambda () (add-to-list 'write-file-functions 'delete-trailing-whitespace)))
+
+
+
+(require 'doxymacs)
+(add-hook 'c-mode-common-hook 'doxymacs-mode)
+(defun my-doxymacs-font-lock-hook ()
+  (if (or (eq major-mode 'c-mode) (eq major-mode 'c++-mode))
+      (doxymacs-font-lock)))
+(add-hook 'font-lock-mode-hook 'my-doxymacs-font-lock-hook)
+(custom-set-faces
+ ;; custom-set-faces was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ )
+
+
+(defun camelize (s)
+  "Convert under_score string S to CamelCase string."
+  (mapconcat 'identity (mapcar
+                        '(lambda (word) (capitalize (downcase word)))
+                        (split-string s "_")) ""))
+
+(defun mapcar-head (fn-head fn-rest list)
+  "Like MAPCAR, but applies a different function to the first element."
+  (if list
+      (cons (funcall fn-head (car list)) (mapcar fn-rest (cdr list)))))
+
+(defun camelize-method (s)
+  "Convert under_score string S to camelCase string."
+  (mapconcat 'identity (mapcar-head
+                        '(lambda (word) (downcase word))
+                        '(lambda (word) (capitalize (downcase word)))
+                        (split-string s "_")) ""))
+
+(defun camelize-previous-snake (&optional beg end)
+      "Camelize the previous snake cased string.
+    
+    If transient-mark-mode is active and a region is activated,
+    camelize the region."
+      (interactive "r")
+      (unless (and (boundp 'transient-mark-mode) transient-mark-mode mark-active)
+        (setq end (point)
+              beg (+ (point) (skip-chars-backward "[:alnum:]_"))))
+      (save-excursion
+        (let ((c (camelize (buffer-substring-no-properties beg end))))
+          (delete-region beg end)
+          (goto-char beg)
+          (insert c))))
+
+(defun camelize-previous-snake-method (&optional beg end)
+      "Camelize the previous snake cased string.
+    
+    If transient-mark-mode is active and a region is activated,
+    camelize the region."
+      (interactive "r")
+      (unless (and (boundp 'transient-mark-mode) transient-mark-mode mark-active)
+        (setq end (point)
+              beg (+ (point) (skip-chars-backward "[:alnum:]_"))))
+      (save-excursion
+        (let ((c (camelize-method (buffer-substring-no-properties beg end))))
+          (delete-region beg end)
+          (goto-char beg)
+          (insert c))))
+
+
+(global-set-key [f3] 'camelize-previous-snake)
+(global-set-key [f4] 'camelize-previous-snake-method)
